@@ -1,0 +1,31 @@
+; Botni systemd orqali doimiy ishlatish uchun namuna.
+;
+;   sudo cp qabul-bot.service /etc/systemd/system/
+;   sudo nano /etc/systemd/system/qabul-bot.service    # User va yo'llarni tekshiring
+;   sudo systemctl daemon-reload
+;   sudo systemctl enable --now qabul-bot
+;
+; Jurnal:      journalctl -u qabul-bot -f
+; Qayta ishga: sudo systemctl restart qabul-bot
+;
+; DIQQAT: botning faqat BITTA nusxasi ishlashi kerak. Ikkitasi bir vaqtda
+; ishlasa Telegram "Conflict: terminated by other getUpdates request" beradi
+; va xabarlar yo'qoladi.
+
+[Unit]
+Description=Qabul jadvali boti (Telegram + Matrix)
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ruslan
+Group=ruslan
+WorkingDirectory=/www/wwwroot/qabul_bot
+ExecStart=/www/wwwroot/qabul_bot/.venv/bin/python bot.py
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

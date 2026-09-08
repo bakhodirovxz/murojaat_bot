@@ -192,6 +192,42 @@ Ustun kengligi va qator balandligi tarkibga qarab avtomatik hisoblanadi — uzun
 manzil yoki murojaat matni kesilib qolmaydi. Sarlavha qatori muzlatilgan, filtr
 yoqilgan, chop etishda albom yo'nalishi va bir varaqqa sig'dirish tanlangan.
 
+## Doimiy ishlatish (server)
+
+Bot — veb-ilova emas, portsiz doimiy jarayon. Ikki yo'l bor.
+
+**aaPanel Supervisor** (App Store → Supervisor Manager):
+
+| Maydon | Qiymat |
+|--------|--------|
+| Name | `qabul_bot` |
+| Run User | papka egasi (masalan `ruslan`) yoki `root` |
+| Process directory | `/www/wwwroot/qabul_bot` |
+| Start Command | `/www/wwwroot/qabul_bot/.venv/bin/python bot.py` |
+| Processes | **1** |
+
+**systemd** — `qabul-bot.service` faylidan foydalaning:
+
+```bash
+sudo cp qabul-bot.service /etc/systemd/system/
+sudo nano /etc/systemd/system/qabul-bot.service   # User va yo'llarni tekshiring
+sudo systemctl daemon-reload
+sudo systemctl enable --now qabul-bot
+journalctl -u qabul-bot -f
+```
+
+> **Faqat bitta nusxa ishlashi kerak.** Ikkita bot bir vaqtda ishlasa Telegram
+> `Conflict: terminated by other getUpdates request` beradi va xabarlar
+> yo'qoladi. Shuning uchun Supervisor'da `Processes = 1`, va qo'lda ishga
+> tushirilgan nusxa qolmaganiga ishonch hosil qiling.
+
+Kod yangilanganda:
+
+```bash
+cd /www/wwwroot/qabul_bot && git pull && .venv/bin/pip install -r requirements.txt
+```
+so'ng Supervisor'da **Restart** (yoki `sudo systemctl restart qabul-bot`).
+
 ## Ma'lumotlar bazasi
 
 Bot ikkala bazada ham ishlaydi — `.env` dagi `DB_TYPE` hal qiladi.
