@@ -1,0 +1,8 @@
+.env
+*.db
+*.xlsx
+__pycache__/
+.venv/
+.pytest_cache/
+files/
+matrix_store/
