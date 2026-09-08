@@ -114,13 +114,28 @@ guruhidagi bilan bir xil, faqat tugmalar o'rniga buyruqlar ishlatiladi.
 | `!find Karimov` | Qidiruv |
 | `!export oy` | Excel eksport: `bugun` · `kecha` · `hafta` · `oy` · `otgan-oy` · `hammasi` · yoki `01.09.2026 30.09.2026` |
 | `!stats` | Hisobot |
-| `!yopish 12` / `!ochish 12` | Arizani yopish yoki qayta ochish |
+| `!yopish 12` / `!ochish 12` | Arizani yopish yoki qayta ochish (qisqasi: `!yop`, `!och`) |
 | `!id` | Xona ID sini ko'rsatish |
 
-Javob berish uchun kartochkaga **reply** qiling — matn ham, fayl ham bo'ladi.
+Element'da tugma yo'q, shuning uchun **har bir kartochka o'z buyruqlarini
+ko'rsatib turadi** — tugmalar o'rniga:
+
+```
+⏳ Javob kutilmoqda
+↩️ Javob berish uchun shu xabarga reply qiling.
+
+✅ Yopish: shu xabarga reply qilib !yopish (yoki !yopish 12)
+📜 Yozishma: !yozishma 12
+```
+
+Kartochkaga **reply** qilib:
+
+- matn yoki fayl yuborsangiz — fuqaroga javob bo'lib ketadi;
+- `!yopish` yozsangiz — ariza yopiladi (raqam kerak emas);
+- `!yozishma` yozsangiz — o'sha arizaning butun tarixi chiqadi.
+
 Javob yetkazilgach bot xabaringizga 👍 qo'yadi va kartochkani joyida
-tahrirlaydi. Kartochkaga reply qilib `!yopish` yozsangiz ham bo'ladi — raqamni
-yozish shart emas.
+tahrirlaydi. Yopilgandan keyin kartochka `!ochish 12` ni taklif qiladi.
 
 Xona shifrlanmagan (E2EE emas) bo'lishi kerak.
 

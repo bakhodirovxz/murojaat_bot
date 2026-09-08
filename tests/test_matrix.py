@@ -528,3 +528,80 @@ class TestCrossChannelEcho:
         run(notify.relay_to_staff(telegram, application, "👤 yozdi:", "Savol", skip="matrix"))
 
         assert telegram.messages[-1][0] == -100500
+
+
+class TestCardActions:
+    """Element'da tugma yo'q — har bir kartochka o'z buyruqlarini ko'rsatishi kerak."""
+
+    def test_open_card_shows_close_and_history(self, wired):
+        bridge, _, path = wired
+        application_id = db.add_application(path, SAMPLE)
+        run(bridge.post_card(db.get_application(path, application_id)))
+
+        body = bridge.client.sent[-1][1]["body"]
+        assert "!yopish" in body
+        assert f"!yozishma {application_id}" in body
+        assert "reply" in body
+
+    def test_closed_card_offers_reopen(self, wired):
+        bridge, _, path = wired
+        application_id = db.add_application(path, SAMPLE)
+        run(bridge.post_card(db.get_application(path, application_id)))
+        db.set_status(path, application_id, db.STATUS_CLOSED)
+        run(bridge.refresh_card(application_id))
+
+        body = bridge.client.edits[-1][1]
+        assert f"!ochish {application_id}" in body
+        assert "!yopish" not in body
+
+    def test_history_command_lists_both_sides(self, wired):
+        bridge, _, path = wired
+        application_id = db.add_application(path, SAMPLE)
+        db.add_message(path, application_id, db.DIRECTION_CITIZEN, text="Savolim bor")
+        db.add_message(
+            path,
+            application_id,
+            db.DIRECTION_ADMIN,
+            text="Javob berildi",
+            file_name="javob.pdf",
+            file_type="document",
+        )
+
+        run(bridge._on_text(FakeRoom(), FakeEvent(f"!yozishma {application_id}")))
+
+        body = bridge.client.sent[-1][1]["body"]
+        assert "Savolim bor" in body
+        assert "Javob berildi" in body
+        assert "javob.pdf" in body
+        assert "Fuqaro" in body and "Admin" in body
+
+    def test_history_by_replying_to_the_card(self, wired):
+        bridge, _, path = wired
+        application_id = db.add_application(path, SAMPLE)
+        db.add_message(path, application_id, db.DIRECTION_ADMIN, text="Birinchi javob")
+        run(bridge.post_card(db.get_application(path, application_id)))
+        card_event = db.get_application(path, application_id)["matrix_event_id"]
+
+        run(bridge._on_text(FakeRoom(), FakeEvent("!yozishma", reply_to=card_event)))
+
+        assert "Birinchi javob" in bridge.client.sent[-1][1]["body"]
+
+    def test_short_aliases(self, wired):
+        bridge, _, path = wired
+        application_id = db.add_application(path, SAMPLE)
+        run(bridge.post_card(db.get_application(path, application_id)))
+
+        run(bridge._on_text(FakeRoom(), FakeEvent(f"!yop {application_id}")))
+        assert db.get_application(path, application_id)["status"] == db.STATUS_CLOSED
+
+        run(bridge._on_text(FakeRoom(), FakeEvent(f"!och {application_id}")))
+        assert db.get_application(path, application_id)["status"] == db.STATUS_IN_PROGRESS
+
+        run(bridge._on_text(FakeRoom(), FakeEvent(f"!tarix {application_id}")))
+        assert "yozishma" in bridge.client.sent[-1][1]["body"].lower()
+
+    def test_help_explains_reply_actions(self, wired):
+        bridge, _, _ = wired
+        run(bridge._on_text(FakeRoom(), FakeEvent("!yordam")))
+        body = bridge.client.sent[-1][1]["body"]
+        assert "!yopish" in body and "!yozishma" in body and "reply" in body

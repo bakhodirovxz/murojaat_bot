@@ -44,15 +44,17 @@ HELP = (
     "<b>Qabul boti buyruqlari</b>\n"
     "!list — javob kutayotgan arizalar\n"
     "!ariza 12 — bitta arizaning kartochkasi\n"
-    "!yozishma 12 — ariza bo'yicha butun yozishma\n"
+    "!yozishma 12 — ariza bo'yicha butun yozishma (qisqasi: !tarix)\n"
     "!find Karimov — F.I.Sh., telefon, JSHSHIR yoki № bo'yicha qidiruv\n"
     "!export oy — Excel eksport (bugun · kecha · hafta · oy · otgan-oy · hammasi "
     "· yoki 01.09.2026 30.09.2026)\n"
     "!stats — hisobot\n"
     "!yopish 12 / !ochish 12 — arizani yopish yoki qayta ochish\n"
     "!id — xona ID sini ko'rsat (sozlash uchun)\n\n"
-    "Javob berish uchun ariza kartochkasiga <b>reply</b> qiling — matn ham, "
-    "fayl ham bo'ladi."
+    "<b>Kartochkaga reply qilib:</b>\n"
+    "• matn yoki fayl — fuqaroga javob bo'lib ketadi\n"
+    "• <code>!yopish</code> — arizani yopadi (raqam yozish shart emas)\n"
+    "• <code>!yozishma</code> — o'sha arizaning tarixini ko'rsatadi"
 )
 
 
@@ -98,6 +100,22 @@ def parse_command(body: str):
 def display_name(user_id: str) -> str:
     """`@aziz:example.uz` → `aziz`."""
     return user_id.lstrip("@").split(":")[0] or user_id
+
+
+def card_text(application: dict, message_count: int = 0) -> str:
+    """Kartochka + Matrix uchun amallar. Element'da tugma yo'q, shuning uchun
+    har bir kartochka o'z buyruqlarini ko'rsatib turadi."""
+    number = application["id"]
+    lines = [notify.render_group_card(application, message_count), ""]
+    if application.get("status") == db.STATUS_CLOSED:
+        lines.append(f"🔄 Qayta ochish: <code>!ochish {number}</code>")
+    else:
+        lines.append(
+            f"✅ Yopish: shu xabarga reply qilib <code>!yopish</code> "
+            f"(yoki <code>!yopish {number}</code>)"
+        )
+    lines.append(f"📜 Yozishma: <code>!yozishma {number}</code>")
+    return "\n".join(lines)
 
 
 class MatrixBridge:
@@ -282,9 +300,7 @@ class MatrixBridge:
     # --- notify chaqiradigan interfeys ------------------------------------
 
     async def post_card(self, application: dict) -> bool:
-        event_id = await self._send(
-            "🆕 <b>Yangi ariza</b>\n\n" + notify.render_group_card(application)
-        )
+        event_id = await self._send("🆕 <b>Yangi ariza</b>\n\n" + card_text(application))
         if not event_id:
             return False
         db.set_matrix_message(DB_PATH, application["id"], self.room_id, event_id)
@@ -294,9 +310,7 @@ class MatrixBridge:
         application = db.get_application(DB_PATH, application_id)
         if not application or not application.get("matrix_event_id"):
             return
-        text = notify.render_group_card(
-            application, db.count_messages(DB_PATH, application_id)
-        )
+        text = card_text(application, db.count_messages(DB_PATH, application_id))
         await self._edit(application["matrix_event_id"], text)
 
     async def post_to_room(self, application: dict, header: str, text: str, file_path: str = "", file_name: str = "") -> None:
@@ -478,7 +492,7 @@ class MatrixBridge:
             await self._cmd_list()
         elif command in {"ariza", "card"}:
             await self._cmd_application(args)
-        elif command in {"yozishma", "history"}:
+        elif command in {"yozishma", "tarix", "history"}:
             await self._cmd_history(args)
         elif command in {"find", "qidir"}:
             await self._cmd_find(args)
@@ -486,7 +500,7 @@ class MatrixBridge:
             await self._cmd_export(args)
         elif command in {"stats", "hisobot"}:
             await self._cmd_stats()
-        elif command in {"yopish", "ochish"}:
+        elif command in {"yopish", "yop", "ochish", "och"}:
             await self._cmd_status(command, args)
         else:
             await self._send(f"Noma'lum buyruq: <code>!{notify.esc(command)}</code>\n\n" + HELP)
@@ -520,7 +534,7 @@ class MatrixBridge:
             await self._send("Ariza raqamini yozing. Masalan: <code>!ariza 12</code>")
             return
         event_id = await self._send(
-            notify.render_group_card(application, db.count_messages(DB_PATH, application["id"]))
+            card_text(application, db.count_messages(DB_PATH, application["id"]))
         )
         if event_id:
             db.link_matrix_event(DB_PATH, self.room_id, event_id, application["id"])
@@ -543,9 +557,7 @@ class MatrixBridge:
             return
         for application in found[:5]:
             event_id = await self._send(
-                notify.render_group_card(
-                    application, db.count_messages(DB_PATH, application["id"])
-                )
+                card_text(application, db.count_messages(DB_PATH, application["id"]))
             )
             if event_id:
                 db.link_matrix_event(DB_PATH, self.room_id, event_id, application["id"])
@@ -604,7 +616,7 @@ class MatrixBridge:
             return
 
         application_id = application["id"]
-        if command == "yopish":
+        if command in {"yopish", "yop"}:
             db.set_status(DB_PATH, application_id, db.STATUS_CLOSED)
             note = f"✅ № {application_id} arizasi yopildi."
             citizen_text = (
