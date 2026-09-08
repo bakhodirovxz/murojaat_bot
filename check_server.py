@@ -46,6 +46,60 @@ def check_tls(host: str, port: int, ca_file: str = ""):
             return issuer.get("organizationName") or issuer.get("commonName") or "?"
 
 
+def check_tls_trust(host: str, port: int, ca_file: str, title: str) -> None:
+    """Avval standart sertifikatlar bilan sinaydi — bot ham aynan shulardan foydalanadi.
+
+    Ular yetsa, tarmoqda aralashuv yo'q. Yetmasa va CA_BUNDLE yordam bersa —
+    tarmoqda TLS'ni qayta imzolovchi proksi bor, lekin bot ishlayveradi.
+    """
+    try:
+        import certifi
+
+        default_bundle = certifi.where()
+    except ImportError:
+        default_bundle = ""
+
+    try:
+        issuer = check_tls(host, port, default_bundle)
+        report(True, f"{title} bilan TLS aloqa bor", f"sertifikatni imzolagan: {issuer}")
+        return
+    except ssl.SSLCertVerificationError:
+        pass
+    except Exception as error:  # noqa: BLE001
+        report(
+            False,
+            f"{title} ga ulanib bo'lmadi",
+            str(error),
+            "Tarmoq yoki bloklanishni tekshiring",
+        )
+        return
+
+    if not ca_file:
+        report(
+            False,
+            f"{title}: sertifikat tekshiruvdan o'tmadi",
+            "Standart sertifikatlar ro'yxati yetmadi.",
+            "Tarmoqda TLS'ni tekshiruvchi proksi bo'lsa, `.env` dagi CA_BUNDLE ga "
+            "tashkilot sertifikatlari .pem faylini ko'rsating",
+        )
+        return
+
+    try:
+        issuer = check_tls(host, port, ca_file)
+        report(True, f"{title} bilan TLS aloqa bor (CA_BUNDLE orqali)", f"imzolagan: {issuer}")
+        warn(
+            "Tarmoqda TLS'ni tekshiruvchi proksi bor",
+            f"Standart sertifikatlar yetmadi, CA_BUNDLE yordam berdi: {ca_file}",
+        )
+    except Exception as error:  # noqa: BLE001
+        report(
+            False,
+            f"{title}: sertifikat tekshiruvdan o'tmadi",
+            str(error),
+            "CA_BUNDLE dagi fayl to'g'ri ekanini tekshiring",
+        )
+
+
 async def main() -> int:
     print("=" * 68)
     print("Qabul boti — server tekshiruvi")
@@ -101,24 +155,7 @@ async def main() -> int:
     except Exception:  # noqa: BLE001
         pass
 
-    try:
-        issuer = check_tls("api.telegram.org", 443, ca_file)
-        report(True, "api.telegram.org bilan TLS aloqa bor", f"sertifikatni imzolagan: {issuer}")
-        if "Google" not in issuer and "GTS" not in issuer:
-            warn(
-                "Sertifikatni tashqi tashkilot imzolagan",
-                "Tarmoqda TLS'ni tekshiruvchi proksi bor. Bu ishlaydi, lekin "
-                "`.env` dagi CA_BUNDLE to'g'ri ko'rsatilgan bo'lishi kerak.",
-            )
-    except Exception as error:  # noqa: BLE001
-        report(
-            False,
-            "api.telegram.org ga ulanib bo'lmadi",
-            str(error),
-            "Bu serverda Telegram bloklangan bo'lishi mumkin. Bot Telegram'ga "
-            "chiqa oladigan kompyuterda turishi SHART, aks holda fuqarolar bilan "
-            "aloqa bo'lmaydi.",
-        )
+    check_tls_trust("api.telegram.org", 443, ca_file, "api.telegram.org")
 
     if config.BOT_TOKEN:
         try:
@@ -142,11 +179,7 @@ async def main() -> int:
     else:
         host = config.MATRIX_HOMESERVER.split("://", 1)[-1].split("/")[0]
         hostname, _, port = host.partition(":")
-        try:
-            issuer = check_tls(hostname, int(port or 443), ca_file)
-            report(True, f"{hostname} bilan TLS aloqa bor", f"sertifikatni imzolagan: {issuer}")
-        except Exception as error:  # noqa: BLE001
-            report(False, f"{hostname} ga ulanib bo'lmadi", str(error), "Homeserver manzilini tekshiring")
+        check_tls_trust(hostname, int(port or 443), ca_file, hostname)
 
         try:
             import matrix_bot
