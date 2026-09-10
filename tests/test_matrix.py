@@ -605,3 +605,101 @@ class TestCardActions:
         run(bridge._on_text(FakeRoom(), FakeEvent("!yordam")))
         body = bridge.client.sent[-1][1]["body"]
         assert "!yopish" in body and "!yozishma" in body and "reply" in body
+
+
+class FakePollEvent:
+    """Element yuboradigan ovoz hodisasi."""
+
+    def __init__(self, answer, sender=ADMIN, event_id="$p1", event_type=None):
+        self.type = event_type or matrix_bot.POLL_RESPONSE
+        self.sender = sender
+        self.event_id = event_id
+        self.server_timestamp = 10_000
+        self.source = {
+            "type": self.type,
+            "content": {
+                matrix_bot.POLL_RESPONSE: {"answers": [answer]} if answer else {},
+                "m.relates_to": {"rel_type": "m.reference", "event_id": "$poll"},
+            },
+        }
+
+
+def poll_sends(client):
+    """Faqat so'rovnoma hodisalari."""
+    return [content for _, content in client.sent if matrix_bot.POLL_START in content]
+
+
+class TestPollButtons:
+    def test_bare_export_offers_clickable_options(self, wired):
+        bridge, _, _ = wired
+        run(bridge._on_text(FakeRoom(), FakeEvent("!export")))
+
+        polls = poll_sends(bridge.client)
+        assert polls, "so'rovnoma yuborilmadi"
+        poll = polls[-1][matrix_bot.POLL_START]
+        ids = [answer["id"] for answer in poll["answers"]]
+        assert ids == [key for key, _ in matrix_bot.EXPORT_OPTIONS]
+        assert poll["max_selections"] == 1
+        # Element eski formatni chizadi — matn kaliti aynan shu bo'lishi shart.
+        assert matrix_bot.POLL_TEXT in poll["question"]
+
+    def test_export_with_argument_still_sends_the_file(self, wired):
+        bridge, _, path = wired
+        db.add_application(path, SAMPLE)
+        run(bridge._on_text(FakeRoom(), FakeEvent("!export hammasi")))
+        assert bridge.client.uploads, "fayl yuborilmadi"
+        assert not poll_sends(bridge.client), "argument bo'lsa so'rovnoma kerak emas"
+
+    def test_clicking_a_period_sends_the_file(self, wired):
+        bridge, _, path = wired
+        db.add_application(path, SAMPLE)
+
+        run(bridge._on_poll(FakeRoom(), FakePollEvent("export:all")))
+
+        assert bridge.client.uploads[-1].endswith(".xlsx")
+        assert "Barcha vaqt" in bridge.client.sent[-1][1]["body"]
+
+    def test_clicking_an_empty_period_reports_it(self, wired):
+        bridge, _, path = wired
+        db.add_application(path, SAMPLE)
+        run(bridge._on_poll(FakeRoom(), FakePollEvent("export:prev_month")))
+        assert "topilmadi" in bridge.client.sent[-1][1]["body"]
+
+    def test_menu_poll_and_its_actions(self, wired):
+        bridge, _, path = wired
+        db.add_application(path, SAMPLE)
+
+        run(bridge._on_text(FakeRoom(), FakeEvent("!menyu")))
+        poll = poll_sends(bridge.client)[-1][matrix_bot.POLL_START]
+        assert [a["id"] for a in poll["answers"]] == [key for key, _ in matrix_bot.MENU_OPTIONS]
+
+        run(bridge._on_poll(FakeRoom(), FakePollEvent("menu:list")))
+        assert "Javob kutayotgan arizalar" in bridge.client.sent[-1][1]["body"]
+
+        run(bridge._on_poll(FakeRoom(), FakePollEvent("menu:stats")))
+        assert "Hisobot" in bridge.client.sent[-1][1]["body"]
+
+        run(bridge._on_poll(FakeRoom(), FakePollEvent("menu:export")))
+        assert matrix_bot.POLL_START in poll_sends(bridge.client)[-1]
+
+    def test_outsider_click_is_ignored(self, wired):
+        bridge, _, path = wired
+        db.add_application(path, SAMPLE)
+        run(bridge._on_poll(FakeRoom(), FakePollEvent("export:all", sender=OUTSIDER)))
+        assert not bridge.client.uploads
+
+    def test_other_event_types_are_ignored(self, wired):
+        bridge, _, path = wired
+        db.add_application(path, SAMPLE)
+        before = len(bridge.client.sent)
+        run(bridge._on_poll(FakeRoom(), FakePollEvent("export:all", event_type="m.boshqa")))
+        run(bridge._on_poll(FakeRoom(), FakePollEvent("")))
+        run(bridge._on_poll(FakeRoom(), FakePollEvent("noma'lum:narsa")))
+        assert len(bridge.client.sent) == before
+        assert not bridge.client.uploads
+
+    def test_answer_id_carries_the_action(self):
+        # Bot so'rovnomalarni eslab qolmaydi — amal variant nomida keladi.
+        content = matrix_bot.build_poll("Savol", matrix_bot.EXPORT_OPTIONS)
+        for answer in content[matrix_bot.POLL_START]["answers"]:
+            assert answer["id"].startswith("export:")

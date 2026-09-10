@@ -108,14 +108,35 @@ guruhidagi bilan bir xil, faqat tugmalar o'rniga buyruqlar ishlatiladi.
 
 | Buyruq | Vazifasi |
 |--------|----------|
+| `!menyu` | **Bosiladigan tugmalar**: ro'yxat · hisobot · eksport · yordam |
 | `!list` | Javob kutayotgan arizalar |
 | `!ariza 12` | Bitta arizaning kartochkasi |
 | `!yozishma 12` | Ariza bo'yicha butun yozishma |
 | `!find Karimov` | Qidiruv |
-| `!export oy` | Excel eksport: `bugun` · `kecha` · `hafta` · `oy` · `otgan-oy` · `hammasi` · yoki `01.09.2026 30.09.2026` |
+| `!export` | Davrni **tugma bilan** tanlash. Argument bilan darrov: `!export oy` (`bugun` · `kecha` · `hafta` · `oy` · `otgan-oy` · `hammasi` · `01.09.2026 30.09.2026`) |
 | `!stats` | Hisobot |
 | `!yopish 12` / `!ochish 12` | Arizani yopish yoki qayta ochish (qisqasi: `!yop`, `!och`) |
 | `!id` | Xona ID sini ko'rsatish |
+
+### Bosiladigan tugmalar
+
+Matrix protokolida Telegramdagidek inline tugma yo'q. Eng yaqin narsa —
+**so'rovnoma**: Element uni bosiladigan variantlar bilan chizadi. `!menyu` va
+argumentsiz `!export` aynan shuni ishlatadi:
+
+```
+📥 Excel eksport — qaysi davr?
+  ○ 📅 Bugun        ○ 📅 Kecha
+  ○ 🗓 Shu hafta    ○ 🗓 Shu oy
+  ○ 🗓 O'tgan oy    ○ 📊 Barchasi
+```
+
+Variantni bosasiz — fayl xonaga tushadi. Amal variant nomining ichida
+saqlanadi (`export:month`), shuning uchun bot so'rovnomalarni eslab qolmaydi:
+qayta ishga tushsa ham eski so'rovnomalar ishlayveradi.
+
+Matn kiritish talab qiladigan buyruqlar (`!find Karimov`, `!ariza 12`) baribir
+qo'lda yoziladi — ularga tugma yasab bo'lmaydi.
 
 Element'da tugma yo'q, shuning uchun **har bir kartochka o'z buyruqlarini
 ko'rsatib turadi** — tugmalar o'rniga:

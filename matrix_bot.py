@@ -25,6 +25,7 @@ from nio import (
     RoomMessageMedia,
     RoomMessageText,
     SyncResponse,
+    UnknownEvent,
 )
 
 import db
@@ -42,6 +43,8 @@ _TAG = re.compile(r"<[^>]+>")
 
 HELP = (
     "<b>Qabul boti buyruqlari</b>\n"
+    "!menyu — <b>bosiladigan tugmalar</b> (ro'yxat, hisobot, eksport)\n"
+    "!export — davrni tugma bilan tanlash\n"
     "!list — javob kutayotgan arizalar\n"
     "!ariza 12 — bitta arizaning kartochkasi\n"
     "!yozishma 12 — ariza bo'yicha butun yozishma (qisqasi: !tarix)\n"
@@ -56,6 +59,52 @@ HELP = (
     "• <code>!yopish</code> — arizani yopadi (raqam yozish shart emas)\n"
     "• <code>!yozishma</code> — o'sha arizaning tarixini ko'rsatadi"
 )
+
+
+# Element so'rovnomalarni MSC3381 ning nostabil nomlari bilan chizadi —
+# xonada sinab ko'rilgan, aynan shu format ishlaydi.
+POLL_START = "org.matrix.msc3381.poll.start"
+POLL_RESPONSE = "org.matrix.msc3381.poll.response"
+POLL_TEXT = "org.matrix.msc1767.text"
+
+# Amal variant nomining ichiga yoziladi ("export:month"), shuning uchun botga
+# so'rovnomalarni eslab qolish kerak emas — qayta ishga tushsa ham ishlaydi.
+EXPORT_OPTIONS = (
+    ("export:today", "📅 Bugun"),
+    ("export:yesterday", "📅 Kecha"),
+    ("export:week", "🗓 Shu hafta"),
+    ("export:month", "🗓 Shu oy"),
+    ("export:prev_month", "🗓 O'tgan oy"),
+    ("export:all", "📊 Barchasi"),
+)
+
+MENU_OPTIONS = (
+    ("menu:list", "📋 Javob kutayotganlar"),
+    ("menu:stats", "📊 Hisobot"),
+    ("menu:export", "📥 Excel eksport"),
+    ("menu:help", "❓ Buyruqlar ro'yxati"),
+)
+
+
+def build_poll(question: str, options) -> dict:
+    """Element chizadigan so'rovnoma hodisasi."""
+    titles = ", ".join(title for _, title in options)
+    return {
+        POLL_START: {
+            "question": {POLL_TEXT: question},
+            "kind": "org.matrix.msc3381.poll.disclosed",
+            "max_selections": 1,
+            "answers": [{"id": key, POLL_TEXT: title} for key, title in options],
+        },
+        POLL_TEXT: f"{question} — {titles}",
+    }
+
+
+def poll_answer(event) -> str:
+    """Ovoz berilgan variant nomi ("export:month"), topilmasa bo'sh satr."""
+    content = (event.source.get("content", {}) or {})
+    answers = (content.get(POLL_RESPONSE, {}) or {}).get("answers") or []
+    return answers[0] if answers else ""
 
 
 def html_body(text: str) -> str:
@@ -182,6 +231,7 @@ class MatrixBridge:
         self._started_ms = int(time.time() * 1000)
         self.client.add_event_callback(self._on_text, RoomMessageText)
         self.client.add_event_callback(self._on_media, RoomMessageMedia)
+        self.client.add_event_callback(self._on_poll, UnknownEvent)
         self.client.add_response_callback(self._on_sync, SyncResponse)
         self._task = asyncio.create_task(self._sync_forever(), name="matrix-sync")
         logger.info("Matrix ulandi: %s (xona: %s)", self.user, self.room_id or "sozlanmagan")
@@ -296,6 +346,51 @@ class MatrixBridge:
         if caption:
             return await self._send(caption)
         return ""
+
+    # --- so'rovnoma-tugmalar ----------------------------------------------
+
+    async def _send_poll(self, question: str, options) -> str:
+        """Element chizadigan bosiladigan variantlar."""
+        if not self.client or not self.room_id:
+            return ""
+        try:
+            response = await self.client.room_send(
+                self.room_id, POLL_START, build_poll(question, options)
+            )
+        except Exception:
+            logger.exception("So'rovnomani yuborib bo'lmadi")
+            return ""
+        return getattr(response, "event_id", "") or ""
+
+    async def _on_poll(self, room, event) -> None:
+        """Variant bosilganda ishga tushadi."""
+        if getattr(event, "type", "") != POLL_RESPONSE:
+            return
+        if self._skip(room, event):
+            return
+        if not matrix_can_answer(event.sender):
+            return
+
+        answer = poll_answer(event)
+        kind, _, key = answer.partition(":")
+        if kind == "export":
+            try:
+                date_from, date_to, label = ranges.resolve(key)
+            except ValueError:
+                return
+            await self._deliver_export(date_from, date_to, label)
+        elif kind == "menu":
+            await self._menu_action(key)
+
+    async def _menu_action(self, key: str) -> None:
+        if key == "list":
+            await self._cmd_list()
+        elif key == "stats":
+            await self._cmd_stats()
+        elif key == "export":
+            await self._send_poll("📥 Excel eksport — qaysi davr?", EXPORT_OPTIONS)
+        elif key == "help":
+            await self._send(HELP)
 
     # --- notify chaqiradigan interfeys ------------------------------------
 
@@ -498,6 +593,8 @@ class MatrixBridge:
             await self._cmd_find(args)
         elif command in {"export", "eksport"}:
             await self._cmd_export(args)
+        elif command in {"menyu", "menu", "tugma"}:
+            await self._send_poll("Nima qilamiz?", MENU_OPTIONS)
         elif command in {"stats", "hisobot"}:
             await self._cmd_stats()
         elif command in {"yopish", "yop", "ochish", "och"}:
@@ -565,12 +662,18 @@ class MatrixBridge:
             await self._send(f"… va yana {len(found) - 5} ta ariza topildi.")
 
     async def _cmd_export(self, args: str) -> None:
+        # Argumentsiz `!export` — bosiladigan variantlar chiqadi.
+        if not (args or "").strip():
+            await self._send_poll("📥 Excel eksport — qaysi davr?", EXPORT_OPTIONS)
+            return
         try:
             date_from, date_to, label = ranges.parse_request(args)
         except ValidationError as error:
             await self._send(f"⚠️ {notify.esc(error)}")
             return
+        await self._deliver_export(date_from, date_to, label)
 
+    async def _deliver_export(self, date_from, date_to, label: str) -> None:
         rows = db.fetch_applications(DB_PATH, date_from, date_to)
         if not rows:
             await self._send(f"«{notify.esc(label)}» uchun ariza topilmadi.")
