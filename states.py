@@ -6,9 +6,9 @@ from aiogram.fsm.state import State, StatesGroup
 class Form(StatesGroup):
     """Fuqaro to'ldiradigan anketa."""
 
+    mode = State()  # to'liq yoki anonim murojaatni tanlash
     fio = State()
     passport = State()
-    jshshir = State()
     birth_date = State()
     address = State()
     phone = State()

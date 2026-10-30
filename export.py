@@ -65,7 +65,7 @@ def row_values(row: dict) -> tuple:
     """Baza yozuvidan jadval qatorini yasaydi."""
     return (
         row["id"],
-        row["fio"],
+        "Anonim" if row.get("anonymous") else row["fio"],
         row["passport"],
         row["jshshir"],
         row["birth_date"],

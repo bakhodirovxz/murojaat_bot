@@ -105,6 +105,7 @@ SCHEMA_MYSQL = (
         group_message_id    BIGINT,
         matrix_room_id      VARCHAR(255),
         matrix_event_id     VARCHAR(255),
+        anonymous           TINYINT NOT NULL DEFAULT 0,
         KEY idx_applications_created_at (created_at),
         KEY idx_applications_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -153,6 +154,7 @@ ADDED_COLUMNS = (
     ("group_message_id", "group_message_id BIGINT", "group_message_id INTEGER"),
     ("matrix_room_id", "matrix_room_id VARCHAR(255)", "matrix_room_id TEXT"),
     ("matrix_event_id", "matrix_event_id VARCHAR(255)", "matrix_event_id TEXT"),
+    ("anonymous", "anonymous TINYINT NOT NULL DEFAULT 0", "anonymous INTEGER NOT NULL DEFAULT 0"),
 )
 
 FIELD_ORDER = (
@@ -166,6 +168,7 @@ FIELD_ORDER = (
     "message",
     "tg_user_id",
     "tg_username",
+    "anonymous",
 )
 
 _LAST_ANSWER = """
@@ -275,7 +278,12 @@ def init_db(target: str) -> None:
 
 def add_application(target: str, data: dict) -> int:
     """Arizani yozadi va unga berilgan tartib raqamini qaytaradi."""
-    values = [data.get(name) for name in FIELD_ORDER]
+    # Anketada so'ralmaydigan matn maydonlar (masalan, JSHSHIR) bo'sh qatorga aylanadi.
+    values = [
+        data.get(name) if name in data or name.startswith("tg_") else ""
+        for name in FIELD_ORDER
+    ]
+    values[FIELD_ORDER.index("anonymous")] = 1 if data.get("anonymous") else 0
     values.append(_now())
     columns = ", ".join(FIELD_ORDER + ("created_at",))
     placeholders = ", ".join("?" * (len(FIELD_ORDER) + 1))

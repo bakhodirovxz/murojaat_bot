@@ -612,7 +612,7 @@ class MatrixBridge:
         for row in rows:
             status = db.STATUS_LABELS.get(row["status"], row["status"])
             lines.append(
-                f"<b>№ {row['id']}</b> · {notify.esc(row['fio'])} · {notify.esc(row['phone'])} "
+                f"<b>№ {row['id']}</b> · {notify.citizen_name(row)} · {notify.esc(row['phone'] or '—')} "
                 f"· {status}"
             )
         if total > len(rows):

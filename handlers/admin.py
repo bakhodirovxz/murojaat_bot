@@ -172,7 +172,7 @@ async def on_application_action(callback: CallbackQuery, state: FSMContext) -> N
         await callback.answer()
         await callback.message.answer(
             f"✍️ <b>№ {application_id} bo'yicha yozishma boshlandi.</b>\n"
-            f"Fuqaro: {notify.esc(application['fio'])}\n\n"
+            f"Fuqaro: {notify.citizen_name(application)}\n\n"
             "Endi yozgan har bir xabaringiz (matn, hujjat, rasm, video, ovozli xabar) "
             "to'g'ridan-to'g'ri fuqaroga yetadi. Fuqaroning javobi shu yerga qaytadi.",
             reply_markup=kb.dialog_keyboard(),

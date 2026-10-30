@@ -41,8 +41,35 @@ def status_line(application: dict) -> str:
     return f"{icon} {db.STATUS_LABELS.get(status, status)}"
 
 
+ANONYMOUS_NAME = "🕶 Anonim"
+
+
+def citizen_name(application: dict) -> str:
+    """Xodimlarga ko'rinadigan murojaatchi nomi (HTML uchun tayyor)."""
+    if application.get("anonymous"):
+        return ANONYMOUS_NAME
+    return esc(application.get("fio"))
+
+
 def render_card(application: dict) -> str:
     """Admin ko'radigan to'liq ariza kartochkasi."""
+    if application.get("anonymous"):
+        lines = [
+            f"<b>№ {application['id']}</b> · {status_line(application)}",
+            "",
+            f"{ANONYMOUS_NAME} <b>murojaat</b> — shaxsiy ma'lumotlar ko'rsatilmagan",
+            "",
+            f"📝 <b>Murojaat:</b>\n{esc(application.get('message'))}",
+            "",
+            f"🕒 <b>Qabul vaqti:</b> {export.pretty_datetime(application.get('created_at', ''))}",
+        ]
+        return "\n".join(lines + _assigned_lines(application))
+    # JSHSHIR endi so'ralmaydi — faqat eski arizalarda bo'lsa ko'rsatiladi.
+    jshshir = (
+        [f"🔢 <b>JSHSHIR:</b> {esc(application['jshshir'])}"]
+        if application.get("jshshir")
+        else []
+    )
     phones = export.format_phones(
         application.get("phone", ""), application.get("phone_extra") or ""
     )
@@ -51,7 +78,7 @@ def render_card(application: dict) -> str:
         "",
         f"👤 <b>F.I.Sh.:</b> {esc(application.get('fio'))}",
         f"🪪 <b>Pasport:</b> {esc(application.get('passport'))}",
-        f"🔢 <b>JSHSHIR:</b> {esc(application.get('jshshir'))}",
+        *jshshir,
         f"🎂 <b>Tug'ilgan sanasi:</b> {esc(application.get('birth_date'))}",
         f"🏠 <b>Manzil:</b> {esc(application.get('address'))}",
         f"📞 <b>Telefon:</b> {esc(phones)}",
@@ -60,10 +87,14 @@ def render_card(application: dict) -> str:
         "",
         f"🕒 <b>Qabul vaqti:</b> {export.pretty_datetime(application.get('created_at', ''))}",
     ]
-    if application.get("assigned_admin"):
-        who = application.get("assigned_admin_name") or f"ID {application['assigned_admin']}"
-        lines.append(f"👮 <b>Mas'ul admin:</b> {esc(who)}")
-    return "\n".join(lines)
+    return "\n".join(lines + _assigned_lines(application))
+
+
+def _assigned_lines(application: dict) -> list:
+    if not application.get("assigned_admin"):
+        return []
+    who = application.get("assigned_admin_name") or f"ID {application['assigned_admin']}"
+    return [f"👮 <b>Mas'ul admin:</b> {esc(who)}"]
 
 
 def render_history(application: dict, messages: list) -> str:

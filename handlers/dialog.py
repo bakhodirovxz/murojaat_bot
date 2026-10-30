@@ -152,7 +152,7 @@ async def citizen_message(message: Message):
     await notify.relay_to_staff(
         message.bot,
         application,
-        GROUP_HEADER.format(id=application_id, fio=notify.esc(application["fio"])),
+        GROUP_HEADER.format(id=application_id, fio=notify.citizen_name(application)),
         text_body,
         kind,
         file_id,
@@ -162,7 +162,7 @@ async def citizen_message(message: Message):
 
     assigned = application.get("assigned_admin")
     recipients = [assigned] if assigned in ADMIN_IDS else sorted(ADMIN_IDS)
-    header = ADMIN_HEADER.format(id=application_id, fio=notify.esc(application["fio"]))
+    header = ADMIN_HEADER.format(id=application_id, fio=notify.citizen_name(application))
     delivered = 0
     for admin_id in recipients:
         if reopened:

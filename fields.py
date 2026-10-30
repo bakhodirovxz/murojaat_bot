@@ -44,16 +44,6 @@ FIELDS = (
         validator=validators.validate_passport,
     ),
     Field(
-        key="jshshir",
-        state=Form.jshshir,
-        label="JSHSHIR raqami",
-        prompt=(
-            "<b>JSHSHIR (PINFL)</b> — 14 xonali raqamni kiriting.\n"
-            "<i>U pasportning orqa tomonida yoki ID-kartada yozilgan.</i>"
-        ),
-        validator=validators.validate_jshshir,
-    ),
-    Field(
         key="birth_date",
         state=Form.birth_date,
         label="Tug'ilgan sanasi",
@@ -109,3 +99,13 @@ FIELDS = (
 
 FIELDS_BY_KEY = {field.key: field for field in FIELDS}
 INDEX_BY_KEY = {field.key: index for index, field in enumerate(FIELDS)}
+
+# Anonim murojaatda faqat shu maydonlar so'raladi — shaxsiy ma'lumot yig'ilmaydi.
+ANONYMOUS_KEYS = ("message",)
+
+
+def active_indices(anonymous: bool) -> tuple:
+    """Anketada so'raladigan maydonlar (FIELDS dagi indekslar) tartib bilan."""
+    if anonymous:
+        return tuple(INDEX_BY_KEY[key] for key in ANONYMOUS_KEYS)
+    return tuple(range(len(FIELDS)))

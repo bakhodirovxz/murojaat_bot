@@ -4,6 +4,7 @@ from datetime import date
 import pytest
 
 import db
+import export
 import keyboards as kb
 import notify
 import ranges
@@ -54,6 +55,7 @@ class TestMigration:
         application = db.get_application(path, 1)
         assert application["status"] == db.STATUS_NEW
         assert application["assigned_admin"] is None
+        assert application["anonymous"] == 0
         assert application["fio"] == "Eski Ariza Egasi"  # ma'lumot saqlanib qoldi
 
 
@@ -338,3 +340,78 @@ class TestGroupCard:
         assert any("Qayta ochish" in text for text in closed_buttons)
         # Guruhda «Javob berish» tugmasi bo'lmasligi kerak — javob reply orqali.
         assert not any("Javob berish" in text for text in open_buttons)
+
+
+ANONYMOUS_SAMPLE = {
+    "fio": "",
+    "passport": "",
+    "jshshir": "",
+    "birth_date": "",
+    "address": "",
+    "phone": "",
+    "phone_extra": "",
+    "message": "Tumandagi maktabda poraxo'rlik holatlari bor.",
+    "tg_user_id": 222,
+    "tg_username": "",
+    "anonymous": True,
+}
+
+
+class TestAnonymous:
+    def test_full_application_is_not_anonymous(self, database):
+        application_id = db.add_application(database, SAMPLE)
+        assert db.get_application(database, application_id)["anonymous"] == 0
+
+    def test_stored_without_personal_data_but_with_reply_address(self, database):
+        application_id = db.add_application(database, ANONYMOUS_SAMPLE)
+        application = db.get_application(database, application_id)
+        assert application["anonymous"] == 1
+        assert application["fio"] == "" and application["phone"] == ""
+        # Javob yetib borishi uchun yozishma topiladi.
+        assert db.application_for_user(database, 222)["id"] == application_id
+
+    def test_card_hides_personal_fields(self, database):
+        application_id = db.add_application(database, ANONYMOUS_SAMPLE)
+        application = db.get_application(database, application_id)
+        card = notify.render_card(application)
+        assert "Anonim" in card
+        assert "poraxo'rlik" in card
+        for label in ("F.I.Sh.", "Pasport", "JSHSHIR", "Telefon", "Manzil"):
+            assert label not in card
+        assert "Anonim" in notify.citizen_name(application)
+        assert "Anonim" in notify.render_group_card(application)
+
+    def test_export_row_marks_anonymous(self, database):
+        db.add_application(database, ANONYMOUS_SAMPLE)
+        row = export.row_values(db.fetch_applications(database)[0])
+        assert row[1] == "Anonim"
+
+    def test_list_button_shows_anonymous(self, database):
+        db.add_application(database, ANONYMOUS_SAMPLE)
+        markup = kb.list_keyboard(db.open_applications(database), 0, 1, 10)
+        assert "Anonim" in markup.inline_keyboard[0][0].text
+
+    def test_only_message_is_asked(self):
+        from fields import FIELDS, active_indices
+
+        assert [FIELDS[index].key for index in active_indices(True)] == ["message"]
+        assert len(active_indices(False)) == len(FIELDS)
+        buttons = kb.edit_menu_keyboard(active_indices(True)).inline_keyboard
+        assert buttons[0][0].text == "1. Murojaat mazmuni"
+
+
+class TestWithoutJshshir:
+    def test_form_does_not_ask_jshshir(self):
+        from fields import FIELDS
+
+        assert "jshshir" not in [field.key for field in FIELDS]
+
+    def test_new_application_without_jshshir(self, database):
+        record = {key: value for key, value in SAMPLE.items() if key != "jshshir"}
+        application = db.get_application(database, db.add_application(database, record))
+        assert application["jshshir"] == ""
+        assert "JSHSHIR" not in notify.render_card(application)
+
+    def test_old_application_still_shows_jshshir(self, database):
+        application = db.get_application(database, db.add_application(database, SAMPLE))
+        assert "31234567890123" in notify.render_card(application)

@@ -22,6 +22,10 @@ CB_EDIT_MENU = "edit_menu"
 CB_CANCEL = "cancel"
 CB_BACK_PREVIEW = "back_preview"
 CB_EDIT_PREFIX = "edit:"
+CB_MODE_FULL = "mode:full"
+CB_MODE_ANONYMOUS = "mode:anon"
+
+ANONYMOUS_NAME = "Anonim"
 
 # --- Admin ----------------------------------------------------------------
 
@@ -47,7 +51,7 @@ def parse_app_callback(data: str):
     return int(parts[0]), parts[1]
 
 
-def field_keyboard(field, index: int, editing: bool) -> ReplyKeyboardMarkup:
+def field_keyboard(field, first: bool, editing: bool) -> ReplyKeyboardMarkup:
     """Bosqichga mos pastki tugmalar."""
     rows = []
     if field.ask_contact:
@@ -55,11 +59,21 @@ def field_keyboard(field, index: int, editing: bool) -> ReplyKeyboardMarkup:
     if field.optional:
         rows.append([KeyboardButton(text=SKIP)])
     navigation = []
-    if editing or index > 0:
+    if editing or not first:
         navigation.append(KeyboardButton(text=BACK))
     navigation.append(KeyboardButton(text=CANCEL))
     rows.append(navigation)
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True, one_time_keyboard=False)
+
+
+def mode_keyboard() -> InlineKeyboardMarkup:
+    """Murojaat turini tanlash: to'liq ma'lumot bilan yoki anonim."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="👤 To'liq ma'lumot bilan", callback_data=CB_MODE_FULL)],
+            [InlineKeyboardButton(text="🕶 Anonim murojaat", callback_data=CB_MODE_ANONYMOUS)],
+        ]
+    )
 
 
 def preview_keyboard() -> InlineKeyboardMarkup:
@@ -72,15 +86,16 @@ def preview_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def edit_menu_keyboard() -> InlineKeyboardMarkup:
+def edit_menu_keyboard(indices) -> InlineKeyboardMarkup:
+    """`indices` — anketada so'ralgan maydonlar (FIELDS dagi indekslar)."""
     rows = [
         [
             InlineKeyboardButton(
-                text=f"{index + 1}. {field.label}",
-                callback_data=f"{CB_EDIT_PREFIX}{field.key}",
+                text=f"{position}. {FIELDS[index].label}",
+                callback_data=f"{CB_EDIT_PREFIX}{FIELDS[index].key}",
             )
         ]
-        for index, field in enumerate(FIELDS)
+        for position, index in enumerate(indices, start=1)
     ]
     rows.append([InlineKeyboardButton(text=BACK, callback_data=CB_BACK_PREVIEW)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -121,7 +136,7 @@ def list_keyboard(applications, offset: int, total: int, page_size: int) -> Inli
     rows = [
         [
             InlineKeyboardButton(
-                text=f"№ {app['id']} · {app['fio']}",
+                text=f"№ {app['id']} · {ANONYMOUS_NAME if app.get('anonymous') else app['fio']}",
                 callback_data=app_callback(app["id"], "card"),
             )
         ]
